@@ -59,6 +59,11 @@ object Graph extends LazyLogging {
       : Reader[GraphTraversal, GraphicsError Xor Vector[Node.Drawable]] =
       Reader[GraphTraversal, GraphicsError Xor Vector[Node.Drawable]] { f =>
         val ops = f(graph)
+        //logger.info("draws are ...")
+//        ops.foreach { 
+  //        case c: Clear.Instance => logger.info(s"clear: ${c.constructor.name}")
+    //      case d: Draw.Instance =>  logger.info(s"draw : ${d.constructor.name}")
+      //  }
         ops.traverse {
           case c: Clear.Instance => c.right
           case d: Draw.Instance =>
@@ -167,6 +172,8 @@ sealed trait Link {
     LEdge(start, end, this)
 }
 
+//FIXME: if the link is an order, make links to the predecessors / successors
+//If the link is a pipe, the original has to be provided
 object Link {
 
   case class Pipe(start: Draw.Constructor,
