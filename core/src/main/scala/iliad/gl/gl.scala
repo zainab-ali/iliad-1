@@ -19,7 +19,7 @@ import scodec.bits._
 object GL {
 
   case class State(cache: Cache.State, current: Current.State)
-  type GL = (Load :|: Cache :|: Draw :|: Current :|: OpenGL :|: NilDSL)
+  type GL = (Load :|: Cache :|: Draw :|: Current :|: NilDSL)
   val GL = freek.DSL.Make[GL]
   type DSL[A] = Free[GL.Cop, A]
   type PRG[F[_], A] = ReaderT[StateT[F, State, ?], GLES30.type, A]
@@ -55,8 +55,7 @@ object GL {
     Load.parse(f).andThen(liftOpenGL) :&:
       CacheParser.andThen(liftCache[F]) :&:
         Draw.parse(f).andThen(liftOpenGL) :&:
-          CurrentParser.andThen(liftCurrent[F]) :&:
-            f.andThen(liftOpenGL)
+          CurrentParser.andThen(liftCurrent[F])
 
   private def getOrElse[A](f: DSL[Option[A]])(g: => DSL[A]): DSL[A] =
     f.flatMap(_.map(Free.pure[GL.Cop, A]).getOrElse(g))
@@ -212,9 +211,9 @@ object GL {
 
   private def setCapability(c: Capability, value: Boolean): DSL[Unit] =
     if (value)
-      OpenGL.enable(c).expand[GL] >> Current.enable(c).expand[GL]
+      Draw.enable(c).expand[GL] >> Current.enable(c).expand[GL]
     else
-      OpenGL.disable(c).expand[GL] >> Current.disable(c).expand[GL]
+      Draw.disable(c).expand[GL] >> Current.disable(c).expand[GL]
 
   private def set(c: Capability, value: Boolean): DSL[Unit] =
     ensure(Current.get(c).map(_.contains(value)))(setCapability(c, value))

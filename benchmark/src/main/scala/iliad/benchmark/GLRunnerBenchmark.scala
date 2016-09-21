@@ -93,7 +93,38 @@ class GLBasicRunnerBenchmark {
   }
 
   @Benchmark
-  def stateMonad(): Unit = {
+  def stateMonad(): GLRunnerBenchmarkUtils.RenderState = {
+    val N = 200
+    val gfx = (0 until N).flatMap(id => BasicModel(id, v"1.0 1.0 1.0").showFirst).toList
+    val rs = GLRunnerBenchmarkUtils.show(session, 100L, gfx) match {
+      case Xor.Right(s) => s
+      case Xor.Left(err) => throw err
+    }
+
+    (0 until 1000).foldLeft(rs){ (s, _) => GLRunnerBenchmarkUtils.drawFrame(s) }
+  }
+}
+
+@State(Scope.Thread)
+class GLMutableRunnerBenchmark {
+
+  var session: GLRunnerBenchmarkUtils.Session = _
+
+  @Setup
+  def setup(): Unit = { 
+    session = GLRunnerBenchmarkUtils.setup(GLMutableRunner) match {
+      case Xor.Right(s) => s
+      case Xor.Left(err) => throw err
+    }
+  }
+
+  @TearDown
+  def tearDown(): Unit = {
+    EGLUtils.destroy(session.session)
+  }
+
+  @Benchmark
+  def mutableRunner(): GLRunnerBenchmarkUtils.RenderState = {
     val N = 200
     val gfx = (0 until N).flatMap(id => BasicModel(id, v"1.0 1.0 1.0").showFirst).toList
     val rs = GLRunnerBenchmarkUtils.show(session, 100L, gfx) match {

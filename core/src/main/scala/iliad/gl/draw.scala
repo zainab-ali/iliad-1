@@ -28,6 +28,8 @@ object Draw {
     BindClearColour(c).free
   def clear(m: ChannelBitMask): DSL[Unit] = ClearFrame(m).free
   def use(p: Program.Linked): DSL[Unit] = UseProgram(p).free
+  def enable(c: Capability): DSL[Unit] = Enable(c).free
+  def disable(c: Capability): DSL[Unit] = Disable(c).free
   def bind(unit: TextureUnit,
            location: Int,
            t: Texture.Loaded,
