@@ -89,7 +89,11 @@ object EGLInterpreter
         Reader(_.eglCreatePbufferSurface(disp, cfg, attribs.toArray))
       case EGLGetDisplay(nDisp) =>
         Reader(_.eglGetDisplay(nDisp))
-      case EGLSwapBuffers(disp, sfc) => Reader(_.eglSwapBuffers(disp, sfc))
+      case EGLSwapBuffers(disp, sfc) => Reader{egl =>
+        val r = egl.eglSwapBuffers(disp, sfc)
+        println(s"frame finished at ${System.currentTimeMillis}")
+        r
+      }
       case EGLMakeCurrent(disp, draw, read, ctx) =>
         Reader(_.eglMakeCurrent(disp, draw, read, ctx))
       case EGLInitialize(disp) =>

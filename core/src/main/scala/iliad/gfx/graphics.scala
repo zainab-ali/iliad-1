@@ -96,4 +96,28 @@ object Graphics {
               gls.sequenceUnit.leftWiden[IliadError]
             }
     } yield gls
+
+  def draws(s: State, us: UniformCache.Values, c: Config, glRunner: GL.GLRunner, gls: GL.GL.State): GL.GL.State = {
+    val start = System.currentTimeMillis
+    val nodes: List[Node.Drawable] = s.graph.nodes(us).run(c.graphTraversal).map(_.toList) match {
+      case Xor.Right(n) => n
+      case _ => sys.error("Unable to get nodes")
+    }
+    val afterNodes = System.currentTimeMillis
+
+    val x: List[GL.GL.DSL[IliadError Xor Unit]] = 
+      nodes.map(n => ToGL.run(ToGL(n)).run(c).leftWiden[IliadError].value)
+    val afterGfx = System.currentTimeMillis
+    val ss = x.foldLeft(gls) { (state, dsl) =>
+      val xor = glRunner.run(dsl, state)
+      xor.flatMap { case (ns, x) => x.map(_ => ns) } match {
+        case Xor.Right(s) => s
+        case _ => sys.error("Unable to execute gl")
+      }
+    }
+    val end = System.currentTimeMillis
+    println(s"total: ${end - start}, nodes: ${afterNodes - start}, gfx: ${afterGfx - afterNodes}, runner: ${end - afterGfx}")
+    ss
+
+  }
 }

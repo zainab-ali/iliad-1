@@ -315,3 +315,200 @@ final class GLDebugInterpreter[F[_]: Monad : RecursiveTailRecM](
       } yield a
   }
 }
+
+
+object GLMutableInterpreter extends (OpenGL.Interpreter[Id]) {
+
+  private val codec: Codec[List[Int]] = list(ByteOrder.nativeOrder match {
+    case ByteOrder.BIG_ENDIAN => int32
+    case ByteOrder.LITTLE_ENDIAN => int32L
+  })
+  
+  private def genObject(f: (Int, IntBuffer) => Unit,
+                        num: Int): Set[Int] = {
+    val ptr = Buffer.int(num)
+    f(num, ptr)
+    val arr = new Array[Int](num)
+    ptr.get(arr, 0, num)
+    arr.toSet
+  }
+
+  def apply[A](gl: OpenGL[A]): Id[A] = gl match {
+
+    case GLGetError => GLES30.glGetError()
+    case GLGetShaderiv(shader, pname) =>
+        val ptr = Buffer.int(1)
+        GLES30.glGetShaderiv(shader, pname.value, ptr)
+        ptr.get()
+    case GLGetShaderInfoLog(shader, maxLength) =>
+        val lenPtr = Buffer.int(1)
+        val logPtr = Buffer.byte(maxLength)
+        GLES30.glGetShaderInfoLog(shader, maxLength, lenPtr, logPtr)
+        val len = lenPtr.get()
+        val arr = new Array[Byte](len)
+        logPtr.get(arr, 0, len)
+        new String(arr)
+    case GLGetProgramiv(program, pname) =>
+        val ptr = Buffer.int(1)
+        GLES30.glGetProgramiv(program, pname.value, ptr)
+        ptr.get()
+    case GLGetProgramInfoLog(program, maxLength) =>
+        val lenPtr = Buffer.int(1)
+        val logPtr = Buffer.byte(maxLength)
+        GLES30.glGetProgramInfoLog(program, maxLength, lenPtr, logPtr)
+        val len = lenPtr.get()
+        val arr = new Array[Byte](len)
+        logPtr.get(arr, 0, len)
+        new String(arr)
+    case GLCreateShader(t) => GLES30.glCreateShader(t.value)
+    case GLShaderSource(shader, sources) =>
+      GLES30.glShaderSource(shader,
+                           sources.size,
+                           sources.toArray,
+                           sources.map(_.length).toArray)
+    case GLCompileShader(shader) => GLES30.glCompileShader(shader)
+    case GLCreateProgram => GLES30.glCreateProgram()
+    case GLAttachShader(program, shader) =>
+      GLES30.glAttachShader(program, shader)
+    case GLLinkProgram(program) => GLES30.glLinkProgram(program)
+    case GLGetAttribLocation(program, name) =>
+      GLES30.glGetAttribLocation(program, name)
+    case GLGetUniformLocation(program, name) =>
+      GLES30.glGetUniformLocation(program, name)
+    case GLGenBuffers(number) => genObject(GLES30.glGenBuffers, number)
+    case GLBindBuffer(target, buffer) =>
+      GLES30.glBindBuffer(target.value, buffer)
+    case GLBufferData(target, size, data, usage) =>
+      GLES30.glBufferData(target.value, size, data.map(_.toDirectByteBuffer) getOrElse null, usage.value)
+    case GLBufferSubData(target, offset, data) =>
+      GLES30.glBufferSubData(target.value, offset, data.size.toInt, data.toDirectByteBuffer)
+    case GLCopyBufferSubData(read, write, readOffset, writeOffset, size) =>
+      GLES30.glCopyBufferSubData(read.value,
+                                write.value,
+                                readOffset,
+                                writeOffset,
+                                size)
+    case GLGenTextures(number) => genObject(GLES30.glGenTextures, number)
+    case GLBindTexture(texture) =>
+     GLES30.glBindTexture(GL_TEXTURE_2D.value, texture)
+    case GLTexImage2D(internalFormat,
+                      width,
+                      height,
+                      format,
+                      pixelType,
+                      data) =>
+      GLES30.glTexImage2D(GL_TEXTURE_2D.value,
+                         0,
+                         internalFormat.value,
+                         width,
+                         height,
+                         0,
+                         format.value,
+                         pixelType.value,
+                         data.map(_.toDirectByteBuffer) getOrElse null)
+    case GLTexSubImage2D(xOffset,
+                         yOffset,
+                         width,
+                         height,
+                         format,
+                         pixelType,
+                         data) =>
+      GLES30.glTexSubImage2D(GL_TEXTURE_2D.value,
+                            0,
+                            xOffset,
+                            yOffset,
+                            width,
+                            height,
+                            format.value,
+                            pixelType.value,
+                            data.toDirectByteBuffer)
+    case GLGenRenderbuffers(number) =>
+      genObject(GLES30.glGenRenderbuffers, number)
+    case GLBindRenderbuffer(renderbuffer) =>
+      GLES30.glBindRenderbuffer(GL_RENDERBUFFER.value, renderbuffer)
+    case GLRenderbufferStorage(format, width, height) =>
+      GLES30.glRenderbufferStorage(GL_RENDERBUFFER.value,
+                                  format.value,
+                                  width,
+                                  height)
+    case GLGenFramebuffers(number) =>
+      genObject(GLES30.glGenFramebuffers, number)
+    case GLBindFramebuffer(target, framebuffer) =>
+      GLES30.glBindFramebuffer(target.value, framebuffer)
+    case GLFramebufferRenderbuffer(channel, renderbuffer) =>
+      GLES30.glFramebufferRenderbuffer(GL_FRAMEBUFFER.value,
+                                      channel.value,
+                                      GL_RENDERBUFFER.value,
+                                      renderbuffer)
+    case GLFramebufferTexture2D(channel, texture) =>
+      GLES30.glFramebufferTexture2D(GL_FRAMEBUFFER.value,
+                                   channel.value,
+                                   GL_TEXTURE_2D.value,
+                                   texture,
+                                   0)
+    case GLDrawBuffers(bufs) =>
+      val buffers = codec.encode(bufs.map(_.value)) match {
+        case Attempt.Successful(b) => b
+        case _ => sys.error("failed to encode draw buffers!")
+      }
+      GLES30.glDrawBuffers(bufs.size, buffers.toDirectByteBuffer.asIntBuffer)
+
+    case GLGenSamplers(number) => genObject(GLES30.glGenSamplers, number)
+    case GLSamplerParameteri(sampler, name, value) =>
+      GLES30.glSamplerParameteri(sampler, name.value, value.value)
+
+    case GLEnable(cap) => GLES30.glEnable(cap.value)
+    case GLDisable(cap) => GLES30.glDisable(cap.value)
+    case GLColorMask(r, g, b, a) => GLES30.glColorMask(r, g, b, a)
+    case GLBlendEquation(mode) => GLES30.glBlendEquation(mode.value)
+    case GLBlendFunc(src, dest) => GLES30.glBlendFunc(src.value, dest.value)
+    case GLViewport(rect) => GLES30.glViewport(rect.bottomLeft.x, rect.bottomLeft.y, rect.width, rect.height)
+    case GLClearColor(r, g, b, a) => GLES30.glClearColor(r, g, b, a)
+    case GLUseProgram(program) => GLES30.glUseProgram(program)
+    case GLEnableVertexAttribArray(location) =>
+      GLES30.glEnableVertexAttribArray(location)
+    case GLVertexAttribPointer(location,
+                               size,
+                               t,
+                               normalized,
+                               stride,
+                               offset) =>
+          GLES30.glVertexAttribPointer(location,
+                                  size,
+                                  t.value,
+                                  normalized,
+                                  stride,
+                                  offset)
+    case GLVertexAttribIPointer(location, size, t, stride, offset) =>
+      GLES30.glVertexAttribIPointer(location, size, t.value, stride, offset)
+    case GLActiveTexture(unit) => GLES30.glActiveTexture(unit.value)
+    case GLBindSampler(unit, sampler) =>
+      GLES30.glBindSampler(Bounded.indexOf(unit), sampler)
+    case GLUniform1i(location, value) => GLES30.glUniform1i(location, value)
+    case GLUniform1f(location, value) => GLES30.glUniform1f(location, value)
+    case GLUniform2i(location, value) =>
+      GLES30.glUniform2i(location, value(0), value(1))
+    case GLUniform2f(location, value) =>
+      GLES30.glUniform2f(location, value(0), value(1))
+    case GLUniform3i(location, value) =>
+      GLES30.glUniform3i(location, value(0), value(1), value(2))
+    case GLUniform3f(location, value) =>
+      GLES30.glUniform3f(location, value(0), value(1), value(2))
+    case GLUniform4i(location, value) =>
+      GLES30.glUniform4i(location, value(0), value(1), value(2), value(3))
+    case GLUniform4f(location, value) =>
+      GLES30.glUniform4f(location, value(0), value(1), value(2), value(3))
+
+    case GLUniformMatrix2f(location, value) =>
+      GLES30.glUniformMatrix2fv(location, 1, true, value.toArray)
+    case GLUniformMatrix3f(location, value) =>
+      GLES30.glUniformMatrix3fv(location, 1, true, value.toArray)
+    case GLUniformMatrix4f(location, value) =>
+      GLES30.glUniformMatrix4fv(location, 1, true, value.toArray)
+
+    case GLDrawElements(mode, count, t, offset) =>
+      GLES30.glDrawElements(mode.value, count, t.value, offset)
+    case GLClear(bitMask) =>
+      GLES30.glClear(bitMask.value)
+  }
+}

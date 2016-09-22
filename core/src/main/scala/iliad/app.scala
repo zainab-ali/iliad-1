@@ -143,8 +143,34 @@ trait GLBootstrap extends LazyLogging {
   private def run(cfg: Graphics.Config,
                   gls: GL.State,
                   us: UniformCache.Values,
-                  gs: Graphics.State): Xor[Error, GL.State] =
-    run(Graphics.draws(gs, us).run(cfg).value, gls)
+                  gs: Graphics.State): Xor[Error, GL.State] = {
+    Graphics.draws(gs, us, cfg, glRunner, gls).right
+    // val start = System.currentTimeMillis
+    // val gl = Graphics.draws(gs, us).run(cfg).value
+    // val afterDraws = System.currentTimeMillis
+    // val xor = glRunner.run(gl, gls)
+    // val afterRunner = System.currentTimeMillis
+    // println(s"total: ${afterRunner - start}, draws: ${afterDraws - start}, runner: ${afterRunner - afterDraws}")
+    // xor.flatMap {
+    //   case (nextS, xxor) => xxor.map(_ => nextS)
+    // }.leftMap(s => new Error(s.toString))
+  }
+
+
+  // private def run(cfg: Graphics.Config,
+  //                 gls: GL.State,
+  //                 us: UniformCache.Values,
+  //                 gs: Graphics.State): Xor[Error, GL.State] = {
+  //   val start = System.currentTimeMillis
+  //   val gl = Graphics.draws(gs, us).run(cfg).value
+  //   val afterDraws = System.currentTimeMillis
+  //   val xor = glRunner.run(gl, gls)
+  //   val afterRunner = System.currentTimeMillis
+  //   println(s"total: ${afterRunner - start}, draws: ${afterDraws - start}, runner: ${afterRunner - afterDraws}")
+  //   xor.flatMap {
+  //     case (nextS, xxor) => xxor.map(_ => nextS)
+  //   }.leftMap(s => new Error(s.toString))
+  // }
 
   private def run(
     at: Long,
@@ -164,12 +190,20 @@ trait GLBootstrap extends LazyLogging {
               val xor = for {
                 p <- prev
                 (prevGr, prevGl) = p
+                start = System.currentTimeMillis
                 q <- run(cfg, gs)(prevGr)
+                afterGfx = System.currentTimeMillis
                 (nextGr, loadCmds) = q
                 midGl <- run(loadCmds.leftWiden[IliadError].value, prevGl)
+                afterLoad = System.currentTimeMillis
                 us = run(at, nextGr.uniformCache)
+                afterUniforms = System.currentTimeMillis
                 nextGl <- run(cfg, midGl, us._2, nextGr)
-              } yield (nextGr.copy(uniformCache = us._1), nextGl)
+                afterDraws = System.currentTimeMillis
+              } yield {
+//                println(s"total: ${afterDraws - start}, gfx: ${afterGfx - start}, load: ${afterLoad - afterGfx}, uniforms: ${afterUniforms - afterLoad}, draws: ${afterDraws - afterUniforms}")
+                (nextGr.copy(uniformCache = us._1), nextGl)
+              }
               (xor, xor.bimap(Task.fail, Task.now).merge[Task[(Graphics.State, GL.State)]])
             }
             .eval

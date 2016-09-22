@@ -30,8 +30,13 @@ object GLBasicRunner extends GLRunner {
   private val interpreter = GL.runner(iliad.gl.OpenGL.run)
 
   def run[A](dsl: GL.DSL[A], s: GL.State): Xor[GLError, (GL.State, A)] = {
+    val start = System.nanoTime
     val prg = dsl.interpret(interpreter)
-    prg.run(GLES30).run(s).right
+    val mid = System.nanoTime
+    val r = prg.run(GLES30).run(s).right
+    val end = System.nanoTime
+    println(s"GLBasicRunner total: ${end - start}, interpret: ${mid - start}, runner: ${end - mid}")
+    r
   }
 }
 
